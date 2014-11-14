@@ -12,12 +12,14 @@
 
 #define ESC_KEY 27
 #define ACCEPTABLE_MOTION_PERCENTAGE 10.0
-#define NUM_POSTBOXES 1
+#define NUM_POSTBOXES 2
+#define MIN_LINE_LENGTH 5
+#define MIN_VISIBLE_LINES 7
 
 const int postbox_locations[NUM_POSTBOXES][3] {
     // Start, End, Row
-    {22,  98, 133}
-    //{254, 398, 265},
+    {22,  98, 133},
+    {127, 199, 132}
     //{54,  200, 502},
 };
 
@@ -47,26 +49,29 @@ cv::Mat findEdges(cv::Mat img) {
 int checkVerticalLineLength(cv::Mat img, int col, int row) {
     int length = 0;
     
-    bool first_row = true;
+    int next_pixel  = (int)img.at<uchar>(row, col);
+    int left_pixel, right_pixel;
     
-    while (true) {
-        int curr_pixel  = (int)img.at<uchar>(row, col);
-        int left_pixel  = (int)img.at<uchar>(row, col-1);
-        int right_pixel = (int)img.at<uchar>(row, col+1);
-        
-        if (curr_pixel != 255){
-            break;
-        }
-        else if (curr_pixel == 255) {
+    if (next_pixel == 255) {
+        while (true) {
             row--;
+            next_pixel  = (int)img.at<uchar>(row, col);
+            left_pixel  = (int)img.at<uchar>(row, col-1);
+            right_pixel = (int)img.at<uchar>(row, col+1);
+            
+            if (next_pixel != 255) {
+                if (left_pixel == 255) {
+                    col--;
+                }
+                else if (right_pixel == 255) {
+                    col++;
+                }
+                else {
+                    break;
+                }
+            }
+            
             length++;
-            first_row = false;
-        }
-        else if (!first_row && left_pixel == 255) {
-            col--;
-        }
-        else if (!first_row && right_pixel == 255) {
-            col++;
         }
     }
     
@@ -75,6 +80,8 @@ int checkVerticalLineLength(cv::Mat img, int col, int row) {
 
 void checkPostboxesForFrame(cv::Mat current_frame) {
     static cv::Mat initial_frame = current_frame.clone();
+    
+    int line_count[NUM_POSTBOXES];
     
     if (!containsMotion(current_frame, initial_frame)) {
         cv::Mat edges = findEdges(current_frame);
@@ -86,20 +93,18 @@ void checkPostboxesForFrame(cv::Mat current_frame) {
             
             cv::Mat color_edges;
             cv::cvtColor(edges, color_edges, CV_GRAY2BGR);
-            
-            int line_count = 0;
-            
+
             for (int pixel = location[0]; pixel < end; pixel++) {
                 int line_length = checkVerticalLineLength(edges, pixel, row);
-                
-                if (line_length > 0) {
-                    line_count++;
+
+                if (line_length > MIN_LINE_LENGTH) {
+                    line_count[n]++;
                 }
                 
                 color_edges.at<cv::Vec3b>(row, pixel) = cv::Vec3b(255, 0, 0);
             }
 
-            if (line_count < 7) {
+            if (line_count[n] < MIN_VISIBLE_LINES) {
                 std::cout << "Post in " << n << std::endl;
             }
             else {
