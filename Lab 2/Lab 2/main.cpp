@@ -12,15 +12,28 @@
 
 #define ESC_KEY 27
 #define ACCEPTABLE_MOTION_PERCENTAGE 10.0
-#define NUM_POSTBOXES 2
+#define NUM_POSTBOXES 6
 #define MIN_LINE_LENGTH 5
-#define MIN_VISIBLE_LINES 7
+#define NUM_LINES 8
+#define VISIBLE_LINES_TOLERANCE 2
 
 const int postbox_locations[NUM_POSTBOXES][3] {
     // Start, End, Row
-    {22,  98, 133},
-    {127, 199, 132}
-    //{54,  200, 502},
+    {22,  98,  130},
+    {127, 199, 130},
+    {30,  100, 248},
+    {130, 194, 248},
+    {30,  100, 360},
+    {126, 194, 360}
+};
+
+const cv::Point status_locations[NUM_POSTBOXES] {
+    cv::Point(50,  90),
+    cv::Point(150, 90),
+    cv::Point(50,  215),
+    cv::Point(150, 215),
+    cv::Point(50,  325),
+    cv::Point(150, 325)
 };
 
 bool containsMotion(cv::Mat current_frame, cv::Mat previous_frame) {
@@ -41,41 +54,25 @@ cv::Mat findEdges(cv::Mat img) {
     cv::Mat img_gray;
     cv::cvtColor(img, img_gray, CV_BGR2GRAY);
     
-    cv::Canny(img_gray, img_gray, 150, 200);
+    cv::Canny(img_gray, img_gray, 300, 400);
 
     return img_gray;
 }
 
-int checkVerticalLineLength(cv::Mat img, int col, int row) {
-    int length = 0;
-    
-    int next_pixel  = (int)img.at<uchar>(row, col);
-    int left_pixel, right_pixel;
-    
-    if (next_pixel == 255) {
-        while (true) {
-            row--;
-            next_pixel  = (int)img.at<uchar>(row, col);
-            left_pixel  = (int)img.at<uchar>(row, col-1);
-            right_pixel = (int)img.at<uchar>(row, col+1);
-            
-            if (next_pixel != 255) {
-                if (left_pixel == 255) {
-                    col--;
-                }
-                else if (right_pixel == 255) {
-                    col++;
-                }
-                else {
-                    break;
-                }
-            }
-            
-            length++;
+int countLinesInRow(cv::Mat img, int start_col, int end_col, int row) {
+    int line_count = 0;
+
+    for (int i = start_col; i < end_col; i++) {
+        int curr_pixel  = (int)img.at<uchar>(row, i);
+        int left_pixel  = (int)img.at<uchar>(row, i-1);
+        int right_pixel = (int)img.at<uchar>(row, i+1);
+        
+        if (curr_pixel == 255 && left_pixel == 0 && right_pixel == 0) {
+            line_count++;
         }
     }
     
-    return length;
+    return line_count;
 }
 
 void checkPostboxesForFrame(cv::Mat current_frame) {
@@ -85,33 +82,26 @@ void checkPostboxesForFrame(cv::Mat current_frame) {
     
     if (!containsMotion(current_frame, initial_frame)) {
         cv::Mat edges = findEdges(current_frame);
+        
+        cv::imshow("Edges", edges);
 
         for (int n = 0; n < NUM_POSTBOXES; n++) {
             const int *location = postbox_locations[n];
-            int end = location[1];
-            int row = location[2];
+
+            line_count[n] = countLinesInRow(edges, location[0], location[1], location[2]);
             
-            cv::Mat color_edges;
-            cv::cvtColor(edges, color_edges, CV_GRAY2BGR);
-
-            for (int pixel = location[0]; pixel < end; pixel++) {
-                int line_length = checkVerticalLineLength(edges, pixel, row);
-
-                if (line_length > MIN_LINE_LENGTH) {
-                    line_count[n]++;
-                }
-                
-                color_edges.at<cv::Vec3b>(row, pixel) = cv::Vec3b(255, 0, 0);
-            }
-
-            if (line_count[n] < MIN_VISIBLE_LINES) {
-                std::cout << "Post in " << n << std::endl;
+            std::cout << std::endl;
+        }
+        
+        for (int n = 0; n < NUM_POSTBOXES; n++) {
+            if (abs(line_count[n] - NUM_LINES) <= VISIBLE_LINES_TOLERANCE) {
+                cv::putText(current_frame, "0", status_locations[n], cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 0, 255), 2, CV_AA);
             }
             else {
-                std::cout << "No Post in " << n << std::endl;
+                cv::putText(current_frame, "1", status_locations[n], cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 0, 255), 2, CV_AA);
             }
             
-            cv::imshow("Edges", color_edges);
+            cv::imshow("Postboxes", current_frame);
         }
     }
     else {
