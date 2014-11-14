@@ -25,20 +25,21 @@ bool containsMotion(cv::Mat current_frame, cv::Mat previous_frame) {
 }
 
 cv::Mat findEdges(cv::Mat frame) {
-    cv::Mat frame_gray, canny_output, detected_edges;
-    std::vector<std::vector<cv::Point> > contours;
-    std::vector<cv::Vec4i> hierarchy;
-
     cv::GaussianBlur(frame, frame, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
     
+    cv::Mat frame_gray;
     cv::cvtColor(frame, frame_gray, CV_RGB2GRAY);
+    
+    cv::Mat canny_output;
+    std::vector<std::vector<cv::Point> > contours;
+    std::vector<cv::Vec4i> hierarchy;
     
     cv::Canny(frame_gray, canny_output, 150, 200);
     cv::findContours(canny_output, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
 
-    cv::Mat edges = cv::Mat::zeros( canny_output.size(), CV_8UC3 );
+    cv::Mat edges = cv::Mat::zeros(canny_output.size(), CV_8UC3);
     for (int i = 0; i < contours.size(); i++) {
-        drawContours(edges, contours, i, cv::Scalar(255, 255, 255), 1, 8, hierarchy, 0, cv::Point());
+        cv::drawContours(edges, contours, i, cv::Scalar(255, 255, 255), 1, 8, hierarchy, 0, cv::Point());
     }
 
     return edges;
