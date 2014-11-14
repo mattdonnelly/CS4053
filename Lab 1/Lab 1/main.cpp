@@ -12,7 +12,7 @@
 int main(int argc, char *argv[]) {
     std::string filepath = "/Users/mattdonnelly/Documents/College/Computer Vision/Lab 1/Media/";
 
-    int num_files = 18;
+    const int num_files = 18;
 
     std::string filenames[] = {
         "BabyFood-Test1.JPG",  "BabyFood-Test2.JPG",  "BabyFood-Test3.JPG",
