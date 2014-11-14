@@ -11,6 +11,7 @@
 #include <opencv2/opencv.hpp>
 
 #define ESC_KEY 27
+#define ACCEPTABLE_MOTION_PERCENTAGE 2.0
 
 bool containsMotion(cv::Mat current_frame, cv::Mat previous_frame) {
     cv::Mat diff;
@@ -21,7 +22,7 @@ bool containsMotion(cv::Mat current_frame, cv::Mat previous_frame) {
     
     double percentage = (cv::countNonZero(diff) / (double)diff.total()) * 100;
 
-    return percentage > 2.0;
+    return percentage > ACCEPTABLE_MOTION_PERCENTAGE;
 }
 
 cv::Mat findEdges(cv::Mat frame) {
