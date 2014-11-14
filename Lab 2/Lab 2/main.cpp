@@ -11,7 +11,15 @@
 #include <opencv2/opencv.hpp>
 
 #define ESC_KEY 27
-#define ACCEPTABLE_MOTION_PERCENTAGE 2.0
+#define ACCEPTABLE_MOTION_PERCENTAGE 10.0
+#define NUM_POSTBOXES 1
+
+const int postbox_locations[NUM_POSTBOXES][3] {
+    // Start, End, Row
+    {22,  98, 133}
+    //{254, 398, 265},
+    //{54,  200, 502},
+};
 
 bool containsMotion(cv::Mat current_frame, cv::Mat previous_frame) {
     cv::Mat diff;
@@ -25,25 +33,44 @@ bool containsMotion(cv::Mat current_frame, cv::Mat previous_frame) {
     return percentage > ACCEPTABLE_MOTION_PERCENTAGE;
 }
 
-cv::Mat findEdges(cv::Mat frame) {
-    cv::GaussianBlur(frame, frame, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
+cv::Mat findEdges(cv::Mat img) {
+    cv::GaussianBlur(img, img, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
     
-    cv::Mat frame_gray;
-    cv::cvtColor(frame, frame_gray, CV_RGB2GRAY);
+    cv::Mat img_gray;
+    cv::cvtColor(img, img_gray, CV_BGR2GRAY);
     
-    cv::Mat canny_output;
-    std::vector<std::vector<cv::Point> > contours;
-    std::vector<cv::Vec4i> hierarchy;
-    
-    cv::Canny(frame_gray, canny_output, 150, 200);
-    cv::findContours(canny_output, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
+    cv::Canny(img_gray, img_gray, 150, 200);
 
-    cv::Mat edges = cv::Mat::zeros(canny_output.size(), CV_8UC3);
-    for (int i = 0; i < contours.size(); i++) {
-        cv::drawContours(edges, contours, i, cv::Scalar(255, 255, 255), 1, 8, hierarchy, 0, cv::Point());
+    return img_gray;
+}
+
+int checkVerticalLineLength(cv::Mat img, int col, int row) {
+    int length = 0;
+    
+    bool first_row = true;
+    
+    while (true) {
+        int curr_pixel  = (int)img.at<uchar>(row, col);
+        int left_pixel  = (int)img.at<uchar>(row, col-1);
+        int right_pixel = (int)img.at<uchar>(row, col+1);
+        
+        if (curr_pixel != 255){
+            break;
+        }
+        else if (curr_pixel == 255) {
+            row--;
+            length++;
+            first_row = false;
+        }
+        else if (!first_row && left_pixel == 255) {
+            col--;
+        }
+        else if (!first_row && right_pixel == 255) {
+            col++;
+        }
     }
-
-    return edges;
+    
+    return length;
 }
 
 void checkPostboxesForFrame(cv::Mat current_frame) {
@@ -51,8 +78,36 @@ void checkPostboxesForFrame(cv::Mat current_frame) {
     
     if (!containsMotion(current_frame, initial_frame)) {
         cv::Mat edges = findEdges(current_frame);
-        
-        cv::imshow("Edges", edges);
+
+        for (int n = 0; n < NUM_POSTBOXES; n++) {
+            const int *location = postbox_locations[n];
+            int end = location[1];
+            int row = location[2];
+            
+            cv::Mat color_edges;
+            cv::cvtColor(edges, color_edges, CV_GRAY2BGR);
+            
+            int line_count = 0;
+            
+            for (int pixel = location[0]; pixel < end; pixel++) {
+                int line_length = checkVerticalLineLength(edges, pixel, row);
+                
+                if (line_length > 0) {
+                    line_count++;
+                }
+                
+                color_edges.at<cv::Vec3b>(row, pixel) = cv::Vec3b(255, 0, 0);
+            }
+
+            if (line_count < 7) {
+                std::cout << "Post in " << n << std::endl;
+            }
+            else {
+                std::cout << "No Post in " << n << std::endl;
+            }
+            
+            cv::imshow("Edges", color_edges);
+        }
     }
     else {
         initial_frame = current_frame.clone();
