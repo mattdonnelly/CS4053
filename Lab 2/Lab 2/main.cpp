@@ -20,7 +20,7 @@ bool containsMotion(cv::Mat current_frame, cv::Mat previous_frame) {
     cvtColor(diff, diff, CV_RGB2GRAY);
     cv::threshold(diff, diff, 35, 255, CV_THRESH_BINARY);
     
-    double percentage = (cv::countNonZero(diff) / (double)diff.total()) * 100;
+    double percentage = cv::countNonZero(diff) * 100 / (double)diff.total();
 
     return percentage > ACCEPTABLE_MOTION_PERCENTAGE;
 }
