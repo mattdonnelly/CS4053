@@ -12,8 +12,6 @@
 
 #define ESC_KEY 27
 
-static cv::Mat initial_frame;
-
 bool containsMotion(cv::Mat current_frame, cv::Mat previous_frame) {
     cv::Mat diff;
     cv::absdiff(current_frame, previous_frame, diff);
@@ -35,7 +33,7 @@ cv::Mat findEdges(cv::Mat frame) {
     
     cv::cvtColor(frame, frame_gray, CV_RGB2GRAY);
     
-    cv::Canny(frame_gray, canny_output, 100, 150);
+    cv::Canny(frame_gray, canny_output, 150, 200);
     cv::findContours(canny_output, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
 
     cv::Mat edges = cv::Mat::zeros( canny_output.size(), CV_8UC3 );
@@ -47,6 +45,8 @@ cv::Mat findEdges(cv::Mat frame) {
 }
 
 void checkPostboxesForFrame(cv::Mat current_frame) {
+    static cv::Mat initial_frame = current_frame.clone();
+    
     if (!containsMotion(current_frame, initial_frame)) {
         cv::Mat edges = findEdges(current_frame);
         
@@ -68,12 +68,7 @@ int main(int argc, char **argv) {
     cv::Mat current_frame;
     while (true) {
         if (!cap.read(current_frame)) {
-            std::cout << "Unable to read frame from video capture." << std::endl;
             break;
-        }
-        
-        if (initial_frame.empty()) {
-            initial_frame = current_frame.clone();
         }
         
         checkPostboxesForFrame(current_frame);
