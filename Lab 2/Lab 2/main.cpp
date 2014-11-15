@@ -15,9 +15,8 @@
 #define MAX_LINES_FULL 6
 
 // Array containing the starting column, end column and
-// row points to scan for vertical lines
+// row points (respectively) to scan for vertical lines
 const int postbox_line_locations[NUM_POSTBOXES][3] {
-    // Start Col, End Col, Row
     {22,  98,  130},
     {127, 199, 130},
     {30,  100, 248},
@@ -91,7 +90,13 @@ void labelPostbox(cv::Mat img, int num, int line_count) {
     }
 }
 
-// Checks and labels the status of each postbox in a frame
+// Checks and labels the status of each postbox in a frame.
+//
+// A record of the last frame without movement is kept to compare
+// with each frame passed to the function to check for movement.
+// If there is no movement in the frame then edge detection will be
+// performed on it and the number of visible lines inside each
+// postbox is checked to determine if it has post
 void checkPostboxesForFrame(cv::Mat current_frame) {
     static cv::Mat last_still_frame = current_frame.clone();
     
