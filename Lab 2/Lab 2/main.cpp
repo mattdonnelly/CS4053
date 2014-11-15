@@ -7,7 +7,6 @@
 //
 
 #include <iostream>
-#include <vector>
 #include <opencv2/opencv.hpp>
 
 #define ESC_KEY 27
@@ -15,6 +14,8 @@
 #define NUM_POSTBOXES 6
 #define MAX_LINES_FULL 6
 
+// Array containing the starting column, end column and
+// row points to scan for vertical lines
 const int postbox_line_locations[NUM_POSTBOXES][3] {
     // Start Col, End Col, Row
     {22,  98,  130},
@@ -25,6 +26,7 @@ const int postbox_line_locations[NUM_POSTBOXES][3] {
     {126, 194, 360}
 };
 
+// Array of points to draw the status of each postbox at
 const cv::Point status_locations[NUM_POSTBOXES] {
     cv::Point(50,  90),
     cv::Point(150, 90),
@@ -34,6 +36,8 @@ const cv::Point status_locations[NUM_POSTBOXES] {
     cv::Point(150, 325)
 };
 
+// Determines if there's motion in a frame by looking at the previous
+// frame and calculating the percentage of change in the image
 bool containsMotion(cv::Mat current_frame, cv::Mat previous_frame) {
     cv::Mat diff;
     cv::absdiff(current_frame, previous_frame, diff);
@@ -46,6 +50,8 @@ bool containsMotion(cv::Mat current_frame, cv::Mat previous_frame) {
     return percentage >= ACCEPTABLE_MOTION_PERCENTAGE;
 }
 
+// Finds the edges of an image by performing Canny edge detection. Returns
+// a grayscale image of the detected edges
 cv::Mat findEdges(cv::Mat img) {
     cv::GaussianBlur(img, img, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
     
@@ -57,6 +63,8 @@ cv::Mat findEdges(cv::Mat img) {
     return img_gray;
 }
 
+// Counts the number of lines in a row between two columns where a line
+// is defined as a white pixel where the two pixels next to it are black
 int countLinesInRow(cv::Mat img, int start_col, int end_col, int row) {
     int line_count = 0;
 
@@ -73,6 +81,7 @@ int countLinesInRow(cv::Mat img, int start_col, int end_col, int row) {
     return line_count;
 }
 
+// Labels a specific postbox based on the number of lines visible
 void labelPostbox(cv::Mat img, int num, int line_count) {
     if (line_count > MAX_LINES_FULL) {
         cv::putText(img, "x", status_locations[num], cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 0, 255), 2, CV_AA);
@@ -82,12 +91,13 @@ void labelPostbox(cv::Mat img, int num, int line_count) {
     }
 }
 
+// Checks and labels the status of each postbox in a frame
 void checkPostboxesForFrame(cv::Mat current_frame) {
-    static cv::Mat initial_frame = current_frame.clone();
+    static cv::Mat last_still_frame = current_frame.clone();
     
     static int line_count[NUM_POSTBOXES];
     
-    if (!containsMotion(current_frame, initial_frame)) {
+    if (!containsMotion(current_frame, last_still_frame)) {
         cv::Mat edges = findEdges(current_frame);
 
         for (int n = 0; n < NUM_POSTBOXES; n++) {
@@ -97,11 +107,10 @@ void checkPostboxesForFrame(cv::Mat current_frame) {
             
             labelPostbox(current_frame, n, line_count[n]);
         }
-        
-        cv::imshow("Postbox Status", current_frame);
     }
     else {
-        initial_frame = current_frame.clone();
+        cv::putText(current_frame, "Motion", cv::Point(50, 210), cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(255, 0, 255), 2, CV_AA);
+        last_still_frame = current_frame.clone();
     }
 }
 
@@ -117,9 +126,9 @@ int main(int argc, char **argv) {
     cv::Mat current_frame;
 
     while (cap.read(current_frame)) {
-        cv::imshow("Video", current_frame);
-        
         checkPostboxesForFrame(current_frame);
+        
+        cv::imshow("Postboxes", current_frame);
 
         if (cv::waitKey(1000.0 / fps) == ESC_KEY) {
             break;
