@@ -115,11 +115,8 @@ int main(int argc, char **argv) {
     const double fps = cap.get(CV_CAP_PROP_FPS);
     
     cv::Mat current_frame;
-    while (true) {
-        if (!cap.read(current_frame)) {
-            break;
-        }
-        
+
+    while (cap.read(current_frame)) {
         cv::imshow("Video", current_frame);
         
         checkPostboxesForFrame(current_frame);
