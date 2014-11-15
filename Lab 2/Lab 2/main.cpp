@@ -15,8 +15,8 @@
 #define NUM_POSTBOXES 6
 #define MAX_LINES_FULL 6
 
-const int postbox_locations[NUM_POSTBOXES][3] {
-    // Start, End, Row
+const int postbox_line_locations[NUM_POSTBOXES][3] {
+    // Start Col, End Col, Row
     {22,  98,  130},
     {127, 199, 130},
     {30,  100, 248},
@@ -91,7 +91,7 @@ void checkPostboxesForFrame(cv::Mat current_frame) {
         cv::Mat edges = findEdges(current_frame);
 
         for (int n = 0; n < NUM_POSTBOXES; n++) {
-            const int *location = postbox_locations[n];
+            const int *location = postbox_line_locations[n];
 
             line_count[n] = countLinesInRow(edges, location[0], location[1], location[2]);
             
