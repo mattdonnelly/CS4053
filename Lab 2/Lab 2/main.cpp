@@ -14,7 +14,7 @@
 #define ACCEPTABLE_MOTION_PERCENTAGE 10.0
 #define NUM_POSTBOXES 6
 #define MIN_LINE_LENGTH 5
-#define NUM_LINES 8
+#define NUM_LINES_EMPTY 8
 #define VISIBLE_LINES_TOLERANCE 2
 
 const int postbox_locations[NUM_POSTBOXES][3] {
@@ -75,6 +75,15 @@ int countLinesInRow(cv::Mat img, int start_col, int end_col, int row) {
     return line_count;
 }
 
+void labelPostbox(cv::Mat img, int num, int line_count) {
+    if (abs(line_count - NUM_LINES_EMPTY) <= VISIBLE_LINES_TOLERANCE) {
+        cv::putText(img, "x", status_locations[num], cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 0, 255), 2, CV_AA);
+    }
+    else {
+        cv::putText(img, "o", status_locations[num], cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 255, 0), 2, CV_AA);
+    }
+}
+
 void checkPostboxesForFrame(cv::Mat current_frame) {
     static cv::Mat initial_frame = current_frame.clone();
     
@@ -82,27 +91,16 @@ void checkPostboxesForFrame(cv::Mat current_frame) {
     
     if (!containsMotion(current_frame, initial_frame)) {
         cv::Mat edges = findEdges(current_frame);
-        
-        cv::imshow("Edges", edges);
 
         for (int n = 0; n < NUM_POSTBOXES; n++) {
             const int *location = postbox_locations[n];
 
             line_count[n] = countLinesInRow(edges, location[0], location[1], location[2]);
             
-            std::cout << std::endl;
+            labelPostbox(current_frame, n, line_count[n]);
         }
         
-        for (int n = 0; n < NUM_POSTBOXES; n++) {
-            if (abs(line_count[n] - NUM_LINES) <= VISIBLE_LINES_TOLERANCE) {
-                cv::putText(current_frame, "0", status_locations[n], cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 0, 255), 2, CV_AA);
-            }
-            else {
-                cv::putText(current_frame, "1", status_locations[n], cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 0, 255), 2, CV_AA);
-            }
-            
-            cv::imshow("Postboxes", current_frame);
-        }
+        cv::imshow("Postboxes", current_frame);
     }
     else {
         initial_frame = current_frame.clone();
@@ -124,7 +122,7 @@ int main(int argc, char **argv) {
         }
         
         checkPostboxesForFrame(current_frame);
-        
+
         if (cv::waitKey(1000.0 / fps) == ESC_KEY) {
             break;
         }
