@@ -13,9 +13,7 @@
 #define ESC_KEY 27
 #define ACCEPTABLE_MOTION_PERCENTAGE 10.0
 #define NUM_POSTBOXES 6
-#define MIN_LINE_LENGTH 5
-#define NUM_LINES_EMPTY 8
-#define VISIBLE_LINES_TOLERANCE 2
+#define MAX_LINES_FULL 6
 
 const int postbox_locations[NUM_POSTBOXES][3] {
     // Start, End, Row
@@ -45,7 +43,7 @@ bool containsMotion(cv::Mat current_frame, cv::Mat previous_frame) {
     
     double percentage = cv::countNonZero(diff) * 100 / (double)diff.total();
 
-    return percentage > ACCEPTABLE_MOTION_PERCENTAGE;
+    return percentage >= ACCEPTABLE_MOTION_PERCENTAGE;
 }
 
 cv::Mat findEdges(cv::Mat img) {
@@ -76,7 +74,7 @@ int countLinesInRow(cv::Mat img, int start_col, int end_col, int row) {
 }
 
 void labelPostbox(cv::Mat img, int num, int line_count) {
-    if (abs(line_count - NUM_LINES_EMPTY) <= VISIBLE_LINES_TOLERANCE) {
+    if (line_count > MAX_LINES_FULL) {
         cv::putText(img, "x", status_locations[num], cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 0, 255), 2, CV_AA);
     }
     else {
@@ -87,7 +85,7 @@ void labelPostbox(cv::Mat img, int num, int line_count) {
 void checkPostboxesForFrame(cv::Mat current_frame) {
     static cv::Mat initial_frame = current_frame.clone();
     
-    int line_count[NUM_POSTBOXES];
+    static int line_count[NUM_POSTBOXES];
     
     if (!containsMotion(current_frame, initial_frame)) {
         cv::Mat edges = findEdges(current_frame);
@@ -100,7 +98,7 @@ void checkPostboxesForFrame(cv::Mat current_frame) {
             labelPostbox(current_frame, n, line_count[n]);
         }
         
-        cv::imshow("Postboxes", current_frame);
+        cv::imshow("Postbox Status", current_frame);
     }
     else {
         initial_frame = current_frame.clone();
@@ -109,6 +107,7 @@ void checkPostboxesForFrame(cv::Mat current_frame) {
 
 int main(int argc, char **argv) {
     cv::VideoCapture cap("/Users/mattdonnelly/Documents/College/Computer Vision/Lab 2/Media/Postboxes.avi");
+    
     if (!cap.isOpened()) {
         return -1;
     }
@@ -120,6 +119,8 @@ int main(int argc, char **argv) {
         if (!cap.read(current_frame)) {
             break;
         }
+        
+        cv::imshow("Video", current_frame);
         
         checkPostboxesForFrame(current_frame);
 
