@@ -104,8 +104,29 @@ cv::Mat extract_shape(cv::Mat img, Shape contour) {
     cv::Mat imageROI;
     img.copyTo(imageROI, mask);
     cv::Mat contour_region = imageROI(bounding_rect);
+    
+    cv::RotatedRect rotated_rect = cv::minAreaRect(cv::Mat(contour));
 
-    return contour_region;
+    cv::Point2f src_points[4];
+    rotated_rect.points(src_points);
+    src_points[0] = cv::Point2f(src_points[0].x - bounding_rect.x, src_points[0].y - bounding_rect.y);
+    src_points[1] = cv::Point2f(src_points[1].x - bounding_rect.x, src_points[1].y - bounding_rect.y);
+    src_points[2] = cv::Point2f(src_points[2].x - bounding_rect.x, src_points[2].y - bounding_rect.y);
+    src_points[3] = cv::Point2f(src_points[3].x - bounding_rect.x, src_points[3].y - bounding_rect.y);
+    
+    cv::Point2f dst_points[4] = {
+        cv::Point2f(bounding_rect.width, bounding_rect.height),
+        cv::Point2f(0.0, bounding_rect.height),
+        cv::Point2f(0.0),
+        cv::Point2f(bounding_rect.width, 0.0)
+    };
+    
+    cv::Mat warp_mat = getAffineTransform(src_points, dst_points);
+    
+    cv::Mat warped = cv::Mat::zeros(contour_region.rows, contour_region.cols, contour_region.type());
+    cv::warpAffine(contour_region, warped, warp_mat, warped.size());
+
+    return warped;
 }
 
 void draw_rotated_rects(cv::Mat img, std::vector<cv::RotatedRect> rects) {
