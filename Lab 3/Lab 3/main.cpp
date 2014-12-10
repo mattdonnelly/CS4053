@@ -24,12 +24,8 @@ cv::Mat find_red_areas(cv::Mat img) {
     cv::extractChannel(img, green, 1);
     cv::extractChannel(img, red, 2);
     
-    cv::bitwise_not(blue, blue);
-    cv::threshold(blue, blue, 255 - MAX_BLUE_VALUE, 255, CV_THRESH_BINARY);
-
-    cv::bitwise_not(green, green);
-    cv::threshold(green, green, 255 - MAX_GREEN_VALUE, 255, CV_THRESH_BINARY);
-
+    cv::inRange(blue, 0, MAX_BLUE_VALUE, blue);
+    cv::inRange(green, 0, MAX_BLUE_VALUE, green);
     cv::threshold(red, red, MIN_RED_VALUE, 255, CV_THRESH_BINARY);
 
     cv::Mat result;
@@ -96,23 +92,20 @@ std::vector<cv::RotatedRect> convert_contours_to_rects(std::vector<Shape> contou
     return rects;
 }
 
-cv::Mat extract_flat_object(cv::Mat img, cv::RotatedRect rect) {
-    float angle = rect.angle;
-    float width = rect.size.width;
-    float height = rect.size.height;
-    if (rect.angle < -45) {
-        angle += 90.0;
-        float temp = width;
-        width = height;
-        height = temp;
-    }
-
-    cv::Mat result;
-    cv::Mat rotation_mat = getRotationMatrix2D(rect.center, angle, 1.0);
-    warpAffine(img, result, rotation_mat, img.size(), cv::INTER_CUBIC);
-    result = result(rect.boundingRect());
+cv::Mat extract_shape(cv::Mat img, Shape contour) {
+    cv::Rect bounding_rect = boundingRect(contour);
     
-    return result;
+    std::vector<Shape> contour_vec;
+    contour_vec.push_back(contour);
+    
+    cv::Mat mask = cv::Mat::zeros(img.size(), CV_8UC1);
+    cv::drawContours(mask, contour_vec, 0, cv::Scalar(255), CV_FILLED);
+
+    cv::Mat imageROI;
+    img.copyTo(imageROI, mask);
+    cv::Mat contour_region = imageROI(bounding_rect);
+
+    return contour_region;
 }
 
 void draw_rotated_rects(cv::Mat img, std::vector<cv::RotatedRect> rects) {
@@ -132,11 +125,13 @@ int main(int argc, const char * argv[]) {
     cv::Mat red_area = find_red_areas(orig.clone());
     std::vector<Shape> contours = find_blob_contours(red_area);
     std::vector<cv::RotatedRect> rects = convert_contours_to_rects(contours);
-
-    draw_rotated_rects(orig, rects);
     
-    cv::imshow("Test", orig);
-    cv::waitKey(-1);
+    for (int i = 0; i < contours.size(); i++) {
+        // Get bounding box for contour
+        cv::Mat test = extract_shape(orig, contours[i]);
+        cv::imshow("Test", test);
+        cv::waitKey(-1);
+    }
     
     return 0;
 }
