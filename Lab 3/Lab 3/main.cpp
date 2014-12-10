@@ -115,11 +115,11 @@ cv::Mat extract_flat_object(cv::Mat img, cv::RotatedRect rect) {
     return result;
 }
 
-void draw_shape_rects(cv::Mat img, std::vector<cv::RotatedRect> rects) {
+void draw_rotated_rects(cv::Mat img, std::vector<cv::RotatedRect> rects) {
     for (int i = 0; i < rects.size(); i++) {
-        static cv::RNG rng(12345);
-        cv::Scalar color = cv::Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
-        cv::Point2f rect_points[4]; rects[i].points( rect_points );
+        cv::Scalar color = cv::Scalar(255, 0, 255);
+        cv::Point2f rect_points[4];
+        rects[i].points( rect_points );
         for (int j = 0; j < 4; j++ ) {
             line(img, rect_points[j], rect_points[(j+1)%4], color, 2, 8);
         }
@@ -132,8 +132,8 @@ int main(int argc, const char * argv[]) {
     cv::Mat red_area = find_red_areas(orig.clone());
     std::vector<Shape> contours = find_blob_contours(red_area);
     std::vector<cv::RotatedRect> rects = convert_contours_to_rects(contours);
-    
-    draw_shape_rects(orig, rects);
+
+    draw_rotated_rects(orig, rects);
     
     cv::imshow("Test", orig);
     cv::waitKey(-1);
