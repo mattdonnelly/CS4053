@@ -9,35 +9,36 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 
-#define MAX_BLUE_VALUE 45.0f
-#define MAX_GREEN_VALUE 45.0f
-#define MIN_RED_VALUE 100.0f
+#define MIN_HUE_RANGE 0.0f
+#define MAX_HUE_RANGE 55.0f
 
-#define MIN_SHAPE_AREA 2000.0f
+#define MIN_SAT_RANGE 150.0f
+#define MAX_SAT_RANGE 255.0f
+
+#define MAX_BLUE_VALUE 90.0f
+#define MAX_GREEN_VALUE 68.0f
+#define MIN_RED_VALUE 57.0f
+
+#define CLOSE_AMOUNT 3.5f
+#define OPEN_AMOUNT 7.0f
+
+#define MIN_SHAPE_AREA 480.0f
 
 typedef std::vector<cv::Point> Shape;
 
 cv::Mat find_red_areas(cv::Mat img) {
-    cv::Mat red, green, blue;
-   
-    cv::extractChannel(img, blue, 0);
-    cv::extractChannel(img, green, 1);
-    cv::extractChannel(img, red, 2);
+    cv::Mat lab;
+    cv::cvtColor(img, lab, CV_BGR2Lab);
     
-    cv::inRange(blue, 0, MAX_BLUE_VALUE, blue);
-    cv::inRange(green, 0, MAX_BLUE_VALUE, green);
-    cv::threshold(red, red, MIN_RED_VALUE, 255, CV_THRESH_BINARY);
-
     cv::Mat result;
-    cv::bitwise_and(blue, green, result);
-    cv::bitwise_and(result, red, result);
+    cv::inRange(lab, cv::Scalar(0, 137, 100), cv::Scalar(180, 255, 255), result);
+    
+    cv::erode(result, result, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(CLOSE_AMOUNT, CLOSE_AMOUNT)));
+    cv::dilate(result, result, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(CLOSE_AMOUNT, CLOSE_AMOUNT)));
+    
+    cv::dilate(result, result, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(OPEN_AMOUNT, OPEN_AMOUNT)));
+    cv::erode(result, result, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(OPEN_AMOUNT, OPEN_AMOUNT)));
 
-    //cv::erode(result, result, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)));
-    //cv::dilate(result, result, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)));
-    
-    cv::dilate(result, result, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)));
-    cv::erode(result, result, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)));
-    
     return result;
 }
 
@@ -53,14 +54,24 @@ bool shape_contains_shape(Shape shape1, Shape shape2) {
     return true;
 }
 
-bool shapes_contain_shape(std::vector<Shape> shapes, Shape shape) {
+std::vector<Shape> filter_intersecting_shapes(std::vector<Shape> shapes) {
+    std::vector<Shape> filtered_shapes;
     for (int i = 0; i < shapes.size(); i++) {
-        if (shape_contains_shape(shapes[i], shape)) {
-            return true;
+        bool inside_shape = false;
+        
+        for (int j = 0; j < shapes.size(); j++) {
+            if (i != j && shape_contains_shape(shapes[j], shapes[i])) {
+                inside_shape = true;
+                break;
+            }
+        }
+        
+        if (!inside_shape) {
+            filtered_shapes.push_back(shapes[i]);
         }
     }
-
-    return false;
+    
+    return filtered_shapes;
 }
 
 std::vector<Shape> find_blob_contours(cv::Mat img){
@@ -74,22 +85,12 @@ std::vector<Shape> find_blob_contours(cv::Mat img){
         std::vector<cv::Point> contour = contours[i];
         
         double area = cv::contourArea(contour, false);
-        if (area > MIN_SHAPE_AREA && !shapes_contain_shape(filtered_contours, contour)) {
+        if (area > MIN_SHAPE_AREA) {
             filtered_contours.push_back(contours[i]);
         }
     }
 
-    return filtered_contours;
-}
-
-std::vector<cv::RotatedRect> convert_contours_to_rects(std::vector<Shape> contours) {
-    std::vector<cv::RotatedRect> rects;
-    
-    for (int i = 0; i < contours.size(); i++) {
-        rects.push_back(cv::minAreaRect(cv::Mat(contours[i])));
-    }
-    
-    return rects;
+    return filter_intersecting_shapes(filtered_contours);
 }
 
 cv::Mat extract_shape(cv::Mat img, Shape contour) {
@@ -129,11 +130,34 @@ cv::Mat extract_shape(cv::Mat img, Shape contour) {
     return warped;
 }
 
-void draw_rotated_rects(cv::Mat img, std::vector<cv::RotatedRect> rects) {
-    for (int i = 0; i < rects.size(); i++) {
-        cv::Scalar color = cv::Scalar(255, 0, 255);
-        cv::Point2f rect_points[4];
-        rects[i].points( rect_points );
+cv::Mat increase_contrast(cv::Mat img) {
+    cv::Mat imgH;
+    img.convertTo(imgH, -1, 1.2, 0);
+    return imgH;
+}
+
+cv::Mat matching_sign(cv::Mat img, std::vector<cv::Mat> samples) {
+    cv::Mat best_match = cv::Mat::zeros(cvSize(1024, 1024), CV_8UC3);
+    
+    for (int i = 0; i < samples.size(); i++) {
+        /*cv::Mat result;
+        matchTemplate(img, samples[i], result, CV_TM_SQDIFF);
+        normalize(result, result, 0, 1, cv::NORM_MINMAX, -1, cv::Mat());
+        
+        cv::imshow("hi", result);
+        cv::waitKey(-1);*/
+    }
+    
+    return best_match;
+}
+
+void draw_shape_rects(cv::Mat img, std::vector<Shape> contours) {
+    for (int i = 0; i < contours.size(); i++) {
+        cv::RotatedRect rect = cv::minAreaRect(cv::Mat(contours[i]));
+        
+        static cv::RNG rng(12345);
+        cv::Scalar color = cv::Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
+        cv::Point2f rect_points[4]; rect.points( rect_points );
         for (int j = 0; j < 4; j++ ) {
             line(img, rect_points[j], rect_points[(j+1)%4], color, 2, 8);
         }
@@ -141,16 +165,47 @@ void draw_rotated_rects(cv::Mat img, std::vector<cv::RotatedRect> rects) {
 }
 
 int main(int argc, const char * argv[]) {
-    cv::Mat orig = cv::imread("/Users/mattdonnelly/Documents/College/Computer Vision/Lab 3/RoadSignRecognitionUnknownSigns/RoadSigns1.jpg");
-
-    cv::Mat red_area = find_red_areas(orig.clone());
-    std::vector<Shape> contours = find_blob_contours(red_area);
-    std::vector<cv::RotatedRect> rects = convert_contours_to_rects(contours);
+    const int num_known_files = 9;
+    std::string known_file_names[] = {
+        "RoadSignGoLeft.JPG",
+        "RoadSignGoRight.JPG",
+        "RoadSignGoStraight.JPG",
+        "RoadSignNoLeftTurn.JPG",
+        "RoadSignNoParking.JPG",
+        "RoadSignNoRightTurn.JPG",
+        "RoadSignNoStraight.JPG",
+        "RoadSignParking.JPG",
+        "RoadSignYield.JPG"
+    };
     
-    for (int i = 0; i < contours.size(); i++) {
-        // Get bounding box for contour
-        cv::Mat test = extract_shape(orig, contours[i]);
-        cv::imshow("Test", test);
+    std::vector<cv::Mat> known_images;
+
+    for (int i = 0; i < num_known_files; i++) {
+        std::string name = known_file_names[i];
+        cv::Mat img = cv::imread("/Users/mattdonnelly/Documents/College/Computer Vision/Lab 3/RoadSignRecognitionKnownSigns/" + name);
+        known_images.push_back(img);
+    }
+    
+    const int num_unknown_files = 5;
+    std::string unknown_file_names[] = {
+        "RoadSigns1.jpg",
+        "RoadSigns2.jpg",
+        "RoadSigns3.jpg",
+        "RoadSignsComposite1.JPG",
+        "RoadSignsComposite2.JPG"
+    };
+    
+    for (int i = 0; i < num_unknown_files; i++) {
+        std::string name = unknown_file_names[i];
+        std::cout << name << std::endl;
+        
+        cv::Mat img = cv::imread("/Users/mattdonnelly/Documents/College/Computer Vision/Lab 3/RoadSignRecognitionUnknownSigns/" + name);
+        
+        cv::Mat red_area = find_red_areas(img);
+        std::vector<Shape> contours = find_blob_contours(red_area);
+        
+        draw_shape_rects(img, contours);
+        cv::imshow("Hi", img);
         cv::waitKey(-1);
     }
     
