@@ -13,7 +13,7 @@
 #define MAX_GREEN_VALUE 45.0f
 #define MIN_RED_VALUE 100.0f
 
-#define MIN_SHAPE_AREA 50.0f
+#define MIN_SHAPE_AREA 2000.0f
 
 typedef std::vector<cv::Point> Shape;
 
@@ -83,27 +83,59 @@ std::vector<Shape> find_blob_contours(cv::Mat img){
         }
     }
 
-    return contours;
+    return filtered_contours;
 }
 
 std::vector<cv::RotatedRect> convert_contours_to_rects(std::vector<Shape> contours) {
-    std::vector<cv::RotatedRect> rects(contours.size());
+    std::vector<cv::RotatedRect> rects;
     
     for (int i = 0; i < contours.size(); i++) {
-        rects[i] = cv::minAreaRect(cv::Mat(contours[i]));
+        rects.push_back(cv::minAreaRect(cv::Mat(contours[i])));
     }
     
     return rects;
 }
 
-int main(int argc, const char * argv[]) {
-    cv::Mat test = cv::imread("/Users/mattdonnelly/Documents/College/Computer Vision/Lab 3/RoadSignRecognitionUnknownSigns/RoadSigns1.jpg");
+cv::Mat extract_flat_object(cv::Mat img, cv::RotatedRect rect) {
+    float angle = rect.angle;
+    float width = rect.size.width;
+    float height = rect.size.height;
+    if (rect.angle < -45) {
+        angle += 90.0;
+        float temp = width;
+        width = height;
+        height = temp;
+    }
 
-    test = find_red_areas(test);
-    std::vector<Shape> contours = find_blob_contours(test);
+    cv::Mat result;
+    cv::Mat rotation_mat = getRotationMatrix2D(rect.center, angle, 1.0);
+    warpAffine(img, result, rotation_mat, img.size(), cv::INTER_CUBIC);
+    result = result(rect.boundingRect());
+    
+    return result;
+}
+
+void draw_shape_rects(cv::Mat img, std::vector<cv::RotatedRect> rects) {
+    for (int i = 0; i < rects.size(); i++) {
+        static cv::RNG rng(12345);
+        cv::Scalar color = cv::Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
+        cv::Point2f rect_points[4]; rects[i].points( rect_points );
+        for (int j = 0; j < 4; j++ ) {
+            line(img, rect_points[j], rect_points[(j+1)%4], color, 2, 8);
+        }
+    }
+}
+
+int main(int argc, const char * argv[]) {
+    cv::Mat orig = cv::imread("/Users/mattdonnelly/Documents/College/Computer Vision/Lab 3/RoadSignRecognitionUnknownSigns/RoadSigns1.jpg");
+
+    cv::Mat red_area = find_red_areas(orig.clone());
+    std::vector<Shape> contours = find_blob_contours(red_area);
     std::vector<cv::RotatedRect> rects = convert_contours_to_rects(contours);
     
-    cv::imshow("Test", test);
+    draw_shape_rects(orig, rects);
+    
+    cv::imshow("Test", orig);
     cv::waitKey(-1);
     
     return 0;
