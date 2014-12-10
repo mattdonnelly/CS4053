@@ -19,12 +19,12 @@
 #define MAX_GREEN_VALUE 68.0f
 #define MIN_RED_VALUE 57.0f
 
-#define CLOSE_AMOUNT 3.5f
+#define CLOSE_AMOUNT 5.0f
 #define OPEN_AMOUNT 7.0f
 
-#define MIN_SHAPE_AREA 480.0f
+#define MIN_CONTOUR_AREA 480.0f
 
-typedef std::vector<cv::Point> Shape;
+typedef std::vector<cv::Point> Contour;
 
 cv::Mat find_red_areas(cv::Mat img) {
     cv::Mat lab;
@@ -42,7 +42,7 @@ cv::Mat find_red_areas(cv::Mat img) {
     return result;
 }
 
-bool shape_contains_shape(Shape shape1, Shape shape2) {
+bool contours_intersect(Contour shape1, Contour shape2) {
     cv::Rect bounding_rect = cv::boundingRect(shape1);
 
     for (int i = 0; i < shape2.size(); i++) {
@@ -54,13 +54,13 @@ bool shape_contains_shape(Shape shape1, Shape shape2) {
     return true;
 }
 
-std::vector<Shape> filter_intersecting_shapes(std::vector<Shape> shapes) {
-    std::vector<Shape> filtered_shapes;
+std::vector<Contour> filter_intersecting_shapes(std::vector<Contour> shapes) {
+    std::vector<Contour> filtered_shapes;
     for (int i = 0; i < shapes.size(); i++) {
         bool inside_shape = false;
         
         for (int j = 0; j < shapes.size(); j++) {
-            if (i != j && shape_contains_shape(shapes[j], shapes[i])) {
+            if (i != j && contours_intersect(shapes[j], shapes[i])) {
                 inside_shape = true;
                 break;
             }
@@ -74,9 +74,9 @@ std::vector<Shape> filter_intersecting_shapes(std::vector<Shape> shapes) {
     return filtered_shapes;
 }
 
-std::vector<Shape> find_blob_contours(cv::Mat img){
-    std::vector<std::vector<cv::Point>> contours;
-    std::vector<std::vector<cv::Point>> filtered_contours;
+std::vector<Contour> find_blob_contours(cv::Mat img){
+    std::vector<Contour> contours;
+    std::vector<Contour> filtered_contours;
     std::vector<cv::Vec4i> hierarchy;
     
     cv::findContours(img.clone(), contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE);
@@ -85,7 +85,7 @@ std::vector<Shape> find_blob_contours(cv::Mat img){
         std::vector<cv::Point> contour = contours[i];
         
         double area = cv::contourArea(contour, false);
-        if (area > MIN_SHAPE_AREA) {
+        if (area > MIN_CONTOUR_AREA) {
             filtered_contours.push_back(contours[i]);
         }
     }
@@ -93,10 +93,10 @@ std::vector<Shape> find_blob_contours(cv::Mat img){
     return filter_intersecting_shapes(filtered_contours);
 }
 
-cv::Mat extract_shape(cv::Mat img, Shape contour) {
+cv::Mat extract_shape(cv::Mat img, Contour contour) {
     cv::Rect bounding_rect = boundingRect(contour);
     
-    std::vector<Shape> contour_vec;
+    std::vector<Contour> contour_vec;
     contour_vec.push_back(contour);
     
     cv::Mat mask = cv::Mat::zeros(img.size(), CV_8UC1);
@@ -130,12 +130,6 @@ cv::Mat extract_shape(cv::Mat img, Shape contour) {
     return warped;
 }
 
-cv::Mat increase_contrast(cv::Mat img) {
-    cv::Mat imgH;
-    img.convertTo(imgH, -1, 1.2, 0);
-    return imgH;
-}
-
 cv::Mat matching_sign(cv::Mat img, std::vector<cv::Mat> samples) {
     cv::Mat best_match = cv::Mat::zeros(cvSize(1024, 1024), CV_8UC3);
     
@@ -151,7 +145,7 @@ cv::Mat matching_sign(cv::Mat img, std::vector<cv::Mat> samples) {
     return best_match;
 }
 
-void draw_shape_rects(cv::Mat img, std::vector<Shape> contours) {
+void draw_shape_rects(cv::Mat img, std::vector<Contour> contours) {
     for (int i = 0; i < contours.size(); i++) {
         cv::RotatedRect rect = cv::minAreaRect(cv::Mat(contours[i]));
         
@@ -202,7 +196,7 @@ int main(int argc, const char * argv[]) {
         cv::Mat img = cv::imread("/Users/mattdonnelly/Documents/College/Computer Vision/Lab 3/RoadSignRecognitionUnknownSigns/" + name);
         
         cv::Mat red_area = find_red_areas(img);
-        std::vector<Shape> contours = find_blob_contours(red_area);
+        std::vector<Contour> contours = find_blob_contours(red_area);
         
         draw_shape_rects(img, contours);
         cv::imshow("Hi", img);
