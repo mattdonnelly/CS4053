@@ -29,6 +29,8 @@ typedef std::vector<cv::Point> Contour;
 cv::Mat find_red_areas(cv::Mat img) {
     cv::Mat lab;
     cv::cvtColor(img, lab, CV_BGR2Lab);
+
+    cv::GaussianBlur(lab, lab, cv::Size(5, 5), 20.0);
     
     cv::Mat result;
     cv::inRange(lab, cv::Scalar(0, 137, 100), cv::Scalar(180, 255, 255), result);
