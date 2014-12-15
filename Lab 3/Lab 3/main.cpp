@@ -23,7 +23,8 @@
 #define CLOSE_AMOUNT 5.0f
 #define OPEN_AMOUNT 7.0f
 
-#define MIN_CONTOUR_AREA 480.0f
+#define MIN_CONTOUR_WIDTH  30.0f
+#define MIN_CONTOUR_HEIGHT 30.0f
 
 typedef std::vector<cv::Point> Contour;
 
@@ -88,8 +89,9 @@ std::vector<Contour> find_blob_contours(cv::Mat img){
     for (int i = 0; i < contours.size(); i++) {
         std::vector<cv::Point> contour = contours[i];
         
-        double area = cv::contourArea(contour, false);
-        if (area > MIN_CONTOUR_AREA) {
+        cv::Rect bounding_rect = boundingRect(contour);
+        if (bounding_rect.size().width > MIN_CONTOUR_WIDTH &&
+            bounding_rect.size().height > MIN_CONTOUR_HEIGHT) {
             filtered_contours.push_back(contours[i]);
         }
     }
@@ -107,29 +109,8 @@ cv::Mat extract_shape(cv::Mat img, Contour contour) {
     cv::drawContours(mask, contour_vec, 0, cv::Scalar(255), CV_FILLED);
 
     cv::Mat imageROI;
-    //img.copyTo(imageROI, mask);
-    cv::Mat contour_region = img(bounding_rect);
-    
-    /*cv::RotatedRect rotated_rect = cv::minAreaRect(cv::Mat(contour));
-
-    cv::Point2f src_points[4];
-    rotated_rect.points(src_points);
-    src_points[0] = cv::Point2f(src_points[0].x - bounding_rect.x, src_points[0].y - bounding_rect.y);
-    src_points[1] = cv::Point2f(src_points[1].x - bounding_rect.x, src_points[1].y - bounding_rect.y);
-    src_points[2] = cv::Point2f(src_points[2].x - bounding_rect.x, src_points[2].y - bounding_rect.y);
-    src_points[3] = cv::Point2f(src_points[3].x - bounding_rect.x, src_points[3].y - bounding_rect.y);
-    
-    cv::Point2f dst_points[4] = {
-        cv::Point2f(bounding_rect.width, bounding_rect.height),
-        cv::Point2f(0.0, bounding_rect.height),
-        cv::Point2f(0.0),
-        cv::Point2f(bounding_rect.width, 0.0)
-    };
-    
-    cv::Mat warp_mat = getAffineTransform(src_points, dst_points);
-    
-    cv::Mat warped = cv::Mat::zeros(contour_region.rows, contour_region.cols, contour_region.type());
-    cv::warpAffine(contour_region, warped, warp_mat, warped.size());*/
+    img.copyTo(imageROI, mask);
+    cv::Mat contour_region = imageROI(bounding_rect);
 
     return contour_region;
 }
@@ -173,28 +154,26 @@ void chamfer_matching(cv::Mat &chamfer_image, cv::Mat &model, cv::Mat &matching_
     }
 }
 
-void show_32bit_image(const char *window_name, cv::Mat &passed_image, double zero_maps_to = 0.0, double passed_scale_factor =-1.0 )
-{
+void show_32bit_image(const char *window_name, cv::Mat &passed_image, double zero_maps_to = 0.0, double passed_scale_factor =-1.0) {
     cv::Mat display_image;
     double scale_factor = passed_scale_factor;
-    if (passed_scale_factor == -1.0)
-    {
+    if (passed_scale_factor == -1.0) {
         double minimum,maximum;
         cv::minMaxLoc(passed_image,&minimum,&maximum);
-        scale_factor = (255.0-zero_maps_to)/cv::max(-minimum,maximum);
+        scale_factor = (255.0 - zero_maps_to) / cv::max(-minimum,maximum);
     }
     passed_image.convertTo(display_image, CV_8U, scale_factor, zero_maps_to);
     imshow( window_name, display_image );
 }
 
-cv::Mat aspect_fit_in_image(cv::Mat img, cv::Size size) {
+cv::Mat aspect_scale_image(cv::Mat img, cv::Size size) {
     double ratios[2] = {
         (double)size.width / (double)img.cols,
         (double)size.height / (double)img.rows
     };
     
     cv::Size resize(img.cols, img.rows);
-    if (ratios[0] < ratios[1]) {
+    if (ratios[0] > ratios[1]) {
         resize.width = (int)(resize.width * ratios[0] + 1);
         resize.height = (int)(resize.height * ratios[0] + 1);
     }
@@ -209,43 +188,55 @@ cv::Mat aspect_fit_in_image(cv::Mat img, cv::Size size) {
     return result;
 }
 
-void matching_sign(cv::Mat img, std::vector<cv::Mat> samples) {
-    cv::Mat best_match = cv::Mat::zeros(cvSize(1024, 1024), CV_8UC3);
+void find_local_minima(cv::Mat &input_image, cv::Mat &local_minima, double threshold_value){
+    cv::Mat eroded_input_image, thresholded_input_image, thresholded_input_8bit;
     
-    cv::imshow("Original", img);
+    cv::erode(input_image, eroded_input_image, cv::Mat());
+    cv::compare(input_image, eroded_input_image, local_minima, cv::CMP_EQ);
     
+    cv::threshold(input_image, thresholded_input_image, threshold_value, 255, cv::THRESH_BINARY_INV);
+    thresholded_input_image.convertTo(thresholded_input_8bit, CV_8U);
+
+    cv::bitwise_and(local_minima, thresholded_input_8bit, local_minima);
+}
+
+int matching_sign(cv::Mat img, std::vector<cv::Mat> samples) {
     cv::Mat img_edges, chamfer_image;
     cv::cvtColor(img, img_edges, CV_BGR2GRAY);
-    cv::Canny(img_edges, img_edges, 200, 300, 3);
-    cv::threshold(img_edges, img_edges, 127, 255, cv::THRESH_BINARY);
-    cv::distanceTransform(img_edges, chamfer_image, CV_DIST_L2 , 3);
-
-    show_32bit_image("Chamfer image", chamfer_image);
-    cv::waitKey(-1);
+    cv::Canny(img_edges, img_edges, 50, 100, 3);
+    cv::threshold(img_edges, img_edges, 127, 255, cv::THRESH_BINARY_INV);
+    cv::distanceTransform(img_edges, chamfer_image, CV_DIST_L2, 3);
+    
+    int best_match_index = -1;
+    int best_match_count = 0;
     
     for (int i = 0; i < samples.size(); i++) {
         cv::Mat sample = samples[i].clone();
-        cv::imshow("Matching against", sample);
-        
         cv::cvtColor(sample, sample, CV_BGR2GRAY);
-        cv::Canny(sample, sample, 200, 400, 3);
+        cv::Canny(sample, sample, 100, 200, 3);
         cv::threshold(sample, sample, 127, 255, cv::THRESH_BINARY);
 
         if (sample.size().width > chamfer_image.size().width ||
                sample.size().height > chamfer_image.size().height) {
-            sample = aspect_fit_in_image(sample, chamfer_image.size());
+            chamfer_image = aspect_scale_image(chamfer_image, sample.size());
         }
         
-        cv::Mat result;
+        cv::Mat result, local_minima;
         chamfer_matching(chamfer_image, sample, result);
-
-        std::cout << result.size() << std::endl;
         
-        if (result.size().area()) {
-            show_32bit_image("Matching image", result);
-            cv::waitKey(-1);
+        find_local_minima(result, local_minima, 20000.0f);
+        
+        int count = cv::countNonZero(local_minima);
+        
+        if (count > best_match_index) {
+            best_match_index = i;
+            best_match_count = count;
         }
     }
+
+    std::cout << best_match_index << std::endl;
+    
+    return best_match_index;
 }
 
 void draw_shape_rects(cv::Mat img, std::vector<Contour> contours) {
@@ -254,12 +245,12 @@ void draw_shape_rects(cv::Mat img, std::vector<Contour> contours) {
     for (int i = 0; i < contours.size(); i++) {
         cv::RotatedRect rect = cv::minAreaRect(cv::Mat(contours[i]));
         
-        cv::Scalar color = cv::Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
+        cv::Scalar color = cv::Scalar(255, 0, 255);
         cv::Point2f rect_points[4];
         rect.points( rect_points );
         
         for (int j = 0; j < 4; j++ ) {
-            line(img, rect_points[j], rect_points[(j+1)%4], color, 2, 8);
+            cv::line(img, rect_points[j], rect_points[(j+1)%4], color, 2, 8);
         }
     }
 }
@@ -267,15 +258,15 @@ void draw_shape_rects(cv::Mat img, std::vector<Contour> contours) {
 int main(int argc, const char * argv[]) {
     const int num_known_files = 9;
     std::string known_file_names[] = {
-        "RoadSignGoLeft.JPG",
-        "RoadSignGoRight.JPG",
-        "RoadSignGoStraight.JPG",
-        "RoadSignNoLeftTurn.JPG",
-        "RoadSignNoParking.JPG",
-        "RoadSignNoRightTurn.JPG",
-        "RoadSignNoStraight.JPG",
-        "RoadSignParking.JPG",
-        "RoadSignYield.JPG"
+        "RoadSignGoLeft.JPG", // 0
+        "RoadSignGoRight.JPG", // 1
+        "RoadSignGoStraight.JPG", // 2
+        "RoadSignNoLeftTurn.JPG", // 3
+        "RoadSignNoParking.JPG", // 4
+        "RoadSignNoRightTurn.JPG", // 5
+        "RoadSignNoStraight.JPG", // 6
+        "RoadSignParking.JPG", // 7
+        "RoadSignYield.JPG" // 8
     };
     
     std::vector<cv::Mat> known_images;
@@ -300,13 +291,22 @@ int main(int argc, const char * argv[]) {
         std::cout << name << std::endl;
         
         cv::Mat img = cv::imread("/Users/mattdonnelly/Documents/College/Computer Vision/Lab 3/RoadSignRecognitionUnknownSigns/" + name);
-        
+
         cv::Mat red_area = find_red_areas(img);
         std::vector<Contour> contours = find_blob_contours(red_area);
-        
+
         for (int j = 0; j < contours.size(); j++) {
             cv::Mat sign = extract_shape(img, contours[j]);
-            matching_sign(sign, known_images);
+            int best_match = matching_sign(sign, known_images);
+            
+            if (best_match > 0) {
+                cv::imshow("Sign", sign);
+                cv::imshow("Matched", known_images[best_match]);
+                cv::waitKey(-1);
+            }
+            else {
+                
+            }
         }
     }
     
